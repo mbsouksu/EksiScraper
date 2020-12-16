@@ -15,23 +15,21 @@ def timer(function):
             print(f"Total execution time: {end-start:.2f} ms")
     return measure
 
-
 def totPage(url, headers):
-    """[For calculation of the number of entry pages for given başlık]
+    """[Total entry pages for başlık]
 
     Args:
-        url : [url of the first page of the başlık without the &p=[page_number] part]
-        headers : [user-agent to be able to enter ekşi]
+        url ([str]): [url of the first page of the başlık without the &p=[page_number] part]
+        headers ([str]): [user-agent to be able to enter ekşi]
+        
+    Returns:
+        [int]: [Returns the page count]
     """
-    #Load the page
-    r = requests.get(url, headers = headers)
     
-    #Convert to BeautifulSoup Object
+    r = requests.get(url, headers = headers)
     soup = bs(r.content, features='html.parser')
     
-    #get the total number of pages
-    #Page is rendered by Javascipt, so we extract the page count a bit brute force. 
-
+    #Page is rendered by Javascipt, so we extract the page count a bit brute force. Selenium is the solution.
     try:
         page_count = int(str(soup.select_one('div.pager'))[-10:-8])
     except:
@@ -40,8 +38,18 @@ def totPage(url, headers):
     return page_count
 
 @timer
-def getEntries(url, headers, tot_page=1, sleep_time=2):
-    
+def getEntries(url, headers, tot_page=1, sleep_time=1.5):
+    """[Return entries and başlık]
+
+    Args:
+        url ([str]): [url of the first page of the başlık without the &p=[page_number] part]
+        headers ([str]): [user-agent to be able to enter ekşi]
+        tot_page (int, optional): [Number of the pages to be downloaded]. Defaults to 1.
+        sleep_time (float, optional): [Sleep time between every page]. Defaults to 1.5.
+
+    Returns:
+        [list]: [entries and entry_title]
+    """
     print(f'Expected time is {sleep_time*tot_page}')
     entries = []
     for i in range(1, tot_page + 1):
@@ -61,17 +69,23 @@ def getEntries(url, headers, tot_page=1, sleep_time=2):
     
     return entries, entry_title
 
-
 def to_csv(entries, filename, title='Entries'):
-    
+    """[Save to the same directory]
+
+    Args:
+        entries ([list]): [List of the entries]
+        filename ([str]): [Name of the saved file]
+        title (str, optional): [Title of the csv]. Defaults to 'Entries'.
+    """
     with open(filename, 'w', newline='') as myfile:
         writer = csv.writer(myfile, quoting=csv.QUOTE_ALL)
         writer.writerow([title])
         writer.writerows(zip(entries))
 
+    
 if __name__ == '__main__':
     url = input('Enter the url of the first page of the entry page: ')
-    headers = {'user-agent': input('Enter the user-agent. Write my user agent in google: ')}
+    headers = {'user-agent': input('Enter the user-agent. Google: my user agent: ')}
     tot_page = totPage(url= url,headers= headers)
     entries, entry_title = getEntries(url= url, headers= headers, tot_page= tot_page)
     filename = input('Enter the filename for saving: ') + '.csv'
