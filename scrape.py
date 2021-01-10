@@ -1,58 +1,65 @@
-from bs4 import BeautifulSoup as bs
-import requests
+import argparse
 import csv
+import re
+import requests
 import time
 from functools import wraps
+from configparser import ConfigParser
+from bs4 import BeautifulSoup as bs
 
 def timer(function):
     @wraps(function)
     def measure(*args, **kwargs):
         start = time.time()
         try:
-            return function(*args, **kwargs)
+            entries, entry_title = function(*args, **kwargs)
+            return entries, entry_title
         finally:
             end = time.time()
-            print(f"Total execution time: {end-start:.2f} ms")
+            print(f"Total execution time {entry_title}: {end-start:.2f} ms")
     return measure
 
-def totPage(url, headers):
-    """[Total entry pages for başlık]
+def get_config(path):
+    """[Read the config file]
 
     Args:
-        url ([str]): [url of the first page of the başlık without the &p=[page_number] part]
-        headers ([str]): [user-agent to be able to enter ekşi]
-        
+        path ([str]): [Path of the config file]
+
     Returns:
-        [int]: [Returns the page count]
+        [dic]: [links dictionaty and user-agent for requests]
     """
-    
-    r = requests.get(url, headers = headers)
-    soup = bs(r.content, features='html.parser')
-    
-    #Page is rendered by Javascipt, so we extract the page count a bit brute force. Selenium is the solution.
-    try:
-        page_count = int(str(soup.select_one('div.pager'))[-10:-8])
-    except:
-        page_count = 1
+    with open(path, 'r') as f:
+        config = ConfigParser()
+        config.read_file(f)
         
-    return page_count
-
+        links_dic = {baslik: link for baslik, link in config.items('links')}
+        headers = {'user-agent': config.get('headers', 'user-agent')}
+    
+    return links_dic, headers
+        
 @timer
-def getEntries(url, headers, tot_page=1, sleep_time=1.5):
-    """[Return entries and başlık]
+def getEntries(url, headers, sleep_time):
+    """[Return entries and baslik]
 
     Args:
-        url ([str]): [url of the first page of the başlık without the &p=[page_number] part]
-        headers ([str]): [user-agent to be able to enter ekşi]
-        tot_page (int, optional): [Number of the pages to be downloaded]. Defaults to 1.
-        sleep_time (float, optional): [Sleep time between every page]. Defaults to 1.5.
+        url ([str]): [url of the first page of the baslik without the &p=[page_number] part]
+        headers ([str]): [user-agent to be able to enter eksi]
+        sleep_time (float, optional): [Sleep time between every page]
 
     Returns:
         [list]: [entries and entry_title]
     """
-    print(f'Expected time is {sleep_time*tot_page}')
+    r = requests.get(url, headers = headers)
+    soup = bs(r.content, features='html.parser')
+    
+    try:
+        count_line = str(soup.select_one('div.pager'))
+        page_count = int(re.findall(r'\d+', count_line)[-1])
+    except:
+        page_count = 1
+
     entries = []
-    for i in range(1, tot_page + 1):
+    for i in range(1, page_count + 1):
         r = requests.get(url + '?p=' + str(i), headers=headers)
         
         time.sleep(sleep_time)
@@ -69,24 +76,33 @@ def getEntries(url, headers, tot_page=1, sleep_time=1.5):
     
     return entries, entry_title
 
-def to_csv(entries, filename, title='Entries'):
+def to_csv(entries, entry_title):
     """[Save to the same directory]
 
     Args:
         entries ([list]): [List of the entries]
-        filename ([str]): [Name of the saved file]
-        title (str, optional): [Title of the csv]. Defaults to 'Entries'.
+        entry_title ([str]): [Name of the saved file and header of the csv]
     """
-    with open(filename, 'w', newline='') as myfile:
+    with open(entry_title + '.csv', 'w', newline='') as myfile:
         writer = csv.writer(myfile, quoting=csv.QUOTE_ALL)
-        writer.writerow([title])
+        writer.writerow([entry_title])
         writer.writerows(zip(entries))
 
+def main():
+    parser = argparse.ArgumentParser(description='Ekşi Web Scraper')
+    parser.add_argument('-p','--path', type=str, help='Path of the config file')
+    parser.add_argument('-t','--time', default=1, type=float, help='Sleep time between the pages of same entry')
+    args =parser.parse_args()
+    
+    if not args.path:
+        parser.print_help()
+        exit()
+    else:
+        links_dic, headers = get_config(args.path)
+    
+    for url in links_dic.values():
+        entries, entry_title = getEntries(url, headers, args.time)
+        to_csv(entries, entry_title)
     
 if __name__ == '__main__':
-    url = input('Enter the url of the first page of the entry page: ')
-    headers = {'user-agent': input('Enter the user-agent. Google: my user agent: ')}
-    tot_page = totPage(url= url,headers= headers)
-    entries, entry_title = getEntries(url= url, headers= headers, tot_page= tot_page)
-    filename = input('Enter the filename for saving: ') + '.csv'
-    to_csv(entries=entries, filename=filename, title=entry_title)
+    main()
